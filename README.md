@@ -15,8 +15,9 @@ Among many tackles, we mainly focus on the following two assumptions.
 
 As a more direct example, see below figure.
 
+<p align="center">
 <img src='./plot/problem definition.png' width="768">
-
+  
 When confronting a task for discriminating different types of bird or texture, the data constituting the two tasks at the yellow box is very heterogeneous. 
 Hence, there may be a limit to cover all these variations with just a single meta-learner. 
 In the case of the green box, tasks are generated in the same way, however, only one image is provided for each class. 
@@ -28,12 +29,18 @@ We aim to disentangle the intermediate representation of Neural Process(NP) by d
 Additionally, to better leverage the latent variables, we newly devised an encoder-decoder pipeline.
 Briefly, overall model diagram is illustrated below.
 
+<p align="center">
 <img src='./plot/model diagram.png' width="768">
-
+  
 1. Carry out a pretask to obtain well-clustered and interpretable representation. 
 2. Apply an agglomerative clus-tering to the obtained representation without any external knowledge such as the number of clusters.
 3. Separately train a different model for each cluster.
 
+Specifically, the dimension-wise pooling (r for batch, z for way) allows the stochastic latent variable z to be in charge of the heterogeneity.
+
+<p align="center">
+<img src='./plot/architecture.png' width="768">
+  
 Please refer to [paper](https://arxiv.org/pdf/2107.02228.pdf) for more details.
 
 ## Experiment
@@ -42,16 +49,18 @@ With the multi-step training process, comprehensive experiments are conducted on
 
 For regression, qualitative comparison of ANP and MAHA on various 1D function types is illustrated. 
 
+<p align="center">
 <img src='./plot/regression performance.png' width="768">
-
+  
 The main interest of ANP is shown to fitting the context points, which poorly perform in predicting the target outputs whose corresponding inputs are located farther away from that of the context points. 
 This tendency can be observed during interpolation and extrapolation, leading to a wiggly prediction with significant variance. 
 By contrast, MAHA can correctly infer the functional shape, which can be confirmed through a consistently low variance.
 
 For classification, t-SNE visualization for the embeddings of four distinct fine-grained image classification datasets is illustrated.
 
-<img src='./plot/t-sne.png' width="768">
-
+<p align="center">
+<img src='./plot/t-sne.png' width="384">
+  
 The embeddings get interpretable when using both the dimension-wise pooling and the auto-encoding structure. 
 The distinct datasets are no more clearly discriminated without either of them, which is quantitatively demonstrated by the estimated purity values.
 We note that the validity of the methodologies stands out particularly in low-shot regime which implies the difficulty of task identification within ambiguity. 
