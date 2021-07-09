@@ -65,7 +65,7 @@ The embeddings get interpretable when using both the dimension-wise pooling and 
 The distinct datasets are no more clearly discriminated without either of them, which is quantitatively demonstrated by the estimated purity values.
 We note that the validity of the methodologies stands out particularly in low-shot regime which implies the difficulty of task identification within ambiguity. 
 
-## Conclustion
+## Conclusion
 In the end, we argue that the proposed model captures the task identity with lower variance, leading to a noticeable improvement in performance. 
 When training meta-learning models, there comes a customization process based on the problem at hand. 
 If not using the benchmark datasets that frequently appear in academia, it becomes unclear to which extent the distinct datasets should be combined, expecting the model to be versatile on every possible task generation. 
