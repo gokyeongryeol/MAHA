@@ -1,5 +1,7 @@
 # Meta-learning Amidst Heterogeneity and Ambiguity
 
+Please refer to [paper link](https://arxiv.org/pdf/2107.02228.pdf) for more details.
+
 ## Problem definition
 
 MAHA is a new meta-learning framework that performs robustly amidst heterogeneity and ambiguity. 
@@ -41,12 +43,15 @@ Specifically, the dimension-wise pooling (r for batch, z for way) allows the sto
 <p align="center">
 <img src='./plot/architecture.png' width="768">
   
-Please refer to [paper](https://arxiv.org/pdf/2107.02228.pdf) for more details.
-
 ## Experiment
 
-With the multi-step training process, comprehensive experiments are conducted on regression and classification. 
-
+With the multi-step training process, comprehensive experiments are conducted on regression and classification.
+We follow the exact setting of [Hierarchically Structured Meta Learning(HRML)](https://proceedings.mlr.press/v97/yao19b/yao19b.pdf), which was accepted in ICML 2019.
+  
+Please refer to `data_loader.py` to see how tasks are generated.
+`MAHA_regression.py` and `MAHA_classification` describes how MAHA processes the generated tasks depending on the problem type.
+Note that `MAHA_variable.py` is for variable way and shot (e.g. [Meta-Dataset](https://arxiv.org/pdf/1903.03096.pdf)) where an additional augmentation technique is utilized across way dimension, which is just a marginal difference, to appropriately apply the proposed pooling operations.
+  
 For regression, qualitative comparison of ANP and MAHA on various 1D function types is illustrated. 
 
 <p align="center">
