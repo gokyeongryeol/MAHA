@@ -1,6 +1,6 @@
 # Meta-learning Amidst Heterogeneity and Ambiguity
 
-Please refer to [paper link](https://arxiv.org/pdf/2107.02228.pdf) for more details.
+This is an official implementation of Meta-learning Amidst Heterogeneity and Ambiguity(MAHA) published in IEEE Access (2022). [link](https://ieeexplore.ieee.org/document/9982600)
 
 ## Problem definition
 
@@ -18,7 +18,7 @@ Among many tackles, we mainly focus on the following two assumptions.
 As a more direct example, see below figure.
 
 <p align="center">
-<img src='./plot/problem definition.png' width="768">
+<img src='./asset/problem definition.png' width="768">
   
 When confronting a task for discriminating different types of bird or texture, the data constituting the two tasks at the yellow box is very heterogeneous. 
 Hence, there may be a limit to cover all these variations with just a single meta-learner. 
@@ -32,7 +32,7 @@ Additionally, to better leverage the latent variables, we newly devised an encod
 Briefly, overall model diagram is illustrated below.
 
 <p align="center">
-<img src='./plot/model diagram.png' width="768">
+<img src='./asset/model diagram.png' width="768">
   
 1. Carry out a pretask to obtain well-clustered and interpretable representation. 
 2. Apply an agglomerative clus-tering to the obtained representation without any external knowledge such as the number of clusters.
@@ -41,7 +41,7 @@ Briefly, overall model diagram is illustrated below.
 Specifically, the dimension-wise pooling (r for batch, z for way) allows the stochastic latent variable z to be in charge of the heterogeneity.
 
 <p align="center">
-<img src='./plot/architecture.png' width="768">
+<img src='./asset/architecture.png' width="768">
   
 ## Experiment
 
@@ -55,7 +55,7 @@ Note that `MAHA_variable.py` is for variable way and shot (e.g. [Meta-Dataset](h
 For regression, qualitative comparison of ANP and MAHA on various 1D function types is illustrated. 
 
 <p align="center">
-<img src='./plot/regression performance.png' width="768">
+<img src='./asset/regression performance.png' width="768">
   
 The main interest of ANP is shown to fitting the context points, which poorly perform in predicting the target outputs whose corresponding inputs are located farther away from that of the context points. 
 This tendency can be observed during interpolation and extrapolation, leading to a wiggly prediction with significant variance. 
@@ -64,7 +64,7 @@ By contrast, MAHA can correctly infer the functional shape, which can be confirm
 For classification, t-SNE visualization for the embeddings of four distinct fine-grained image classification datasets is illustrated.
 
 <p align="center">
-<img src='./plot/t-sne.png' width="384">
+<img src='./asset/t-sne.png' width="384">
   
 The embeddings get interpretable when using both the dimension-wise pooling and the auto-encoding structure. 
 The distinct datasets are no more clearly discriminated without either of them, which is quantitatively demonstrated by the estimated purity values.

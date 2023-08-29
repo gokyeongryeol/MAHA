@@ -1,80 +1,149 @@
-#Following link is what we referred to for constructing modules for set transformer
-#https://github.com/juho-lee/set_transformer/blob/master/modules.py
+import math
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import math
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+from torch.distributions.normal import Normal
+from utils import calc_log_prob, initialize_weight
 
-class MAB(nn.Module):
-    def __init__(self, dim_Q, dim_K, dim_V, num_heads, ln=False):
-        super(MAB, self).__init__()
-        self.dim_V = dim_V
-        self.num_heads = num_heads
-        self.fc_q = nn.Linear(dim_Q, dim_V)
-        self.fc_k = nn.Linear(dim_K, dim_V)
-        self.fc_v = nn.Linear(dim_K, dim_V)
-        if ln:
-            self.ln0 = nn.LayerNorm(dim_V)
-            self.ln1 = nn.LayerNorm(dim_V)
-        self.fc_o = nn.Linear(dim_V, dim_V)
 
-    def forward(self, Q, K):
-        Q = self.fc_q(Q)
-        K, V = self.fc_k(K), self.fc_v(K)
-
-        dim_split = self.dim_V // self.num_heads
-        Q_ = torch.cat(Q.split(dim_split, 2), 0)
-        K_ = torch.cat(K.split(dim_split, 2), 0)
-        V_ = torch.cat(V.split(dim_split, 2), 0)
-
-        A = torch.softmax(Q_.bmm(K_.transpose(1,2))/math.sqrt(self.dim_V), 2)
-        O = torch.cat((Q_ + A.bmm(V_)).split(Q.size(0), 0), 2)
-        O = O if getattr(self, 'ln0', None) is None else self.ln0(O)
-        O = O + F.relu(self.fc_o(O))
-        O = O if getattr(self, 'ln1', None) is None else self.ln1(O)
-        return O
-
-class SAB(nn.Module):
-    def __init__(self, dim_in, dim_out, num_heads, ln=False):
-        super(SAB, self).__init__()
-        self.mab = MAB(dim_in, dim_in, dim_out, num_heads, ln=ln)
-
-    def forward(self, X):
-        return self.mab(X, X)
-
-class ISAB(nn.Module):
-    def __init__(self, dim_in, dim_out, num_heads, num_inds, ln=False):
-        super(ISAB, self).__init__()
-        self.I = nn.Parameter(torch.Tensor(1, num_inds, dim_out))
-        nn.init.xavier_uniform_(self.I)
-        self.mab0 = MAB(dim_out, dim_in, dim_out, num_heads, ln=ln)
-        self.mab1 = MAB(dim_in, dim_out, dim_out, num_heads, ln=ln)
-
-    def forward(self, X):
-        H = self.mab0(self.I.repeat(X.size(0), 1, 1), X)
-        return self.mab1(X, H)
-
-class PMA(nn.Module):
-    def __init__(self, dim, num_heads, num_seeds, ln=False):
-        super(PMA, self).__init__()
-        self.S = nn.Parameter(torch.Tensor(1, num_seeds, dim))
-        nn.init.xavier_uniform_(self.S)
-        self.mab = MAB(dim, dim, dim, num_heads, ln=ln)
-
-    def forward(self, X):
-        return self.mab(self.S.repeat(X.size(0), 1, 1), X)
-
-class SetTransformer(nn.Module):
-    def __init__(self, dim_input, dim_hidden, dim_output, num_heads, num_inds, num_seeds, ln):
-        super(SetTransformer, self).__init__()
-        self.encoder = nn.Sequential(ISAB(dim_input, dim_hidden, num_heads, num_inds, ln),
-                                     ISAB(dim_hidden, dim_hidden, num_heads, num_inds, ln))
-        self.pooling = PMA(dim_hidden, num_heads, num_seeds, ln)
-        self.decoder = nn.Sequential(SAB(dim_hidden, dim_hidden, num_heads, ln),
-                                     SAB(dim_hidden, dim_output, num_heads, ln))
+class MLP(nn.Module):
+    def __init__(self, inp, hid, out, activation, num_layer):
+        super(MLP, self).__init__()
         
+        unit = inp
+        layer_list = []
+        for _ in range(num_layer-1):
+            layer_list.append(nn.Linear(unit, hid))
+            layer_list.append(activation)
+            unit = hid
+        layer_list.append(nn.Linear(hid, out))
+        self.net = nn.Sequential(*layer_list).apply(initialize_weight)
+    
     def forward(self, x):
-        return self.decoder(self.pooling(self.encoder(x)))
+        x = self.net(x)
+        return x
+    
+        
+class Prior(nn.Module):
+    def __init__(self, z_dim, std=1.0):
+        super(Prior, self).__init__()
+        self.z_dim = z_dim
+        self.std = std
+        
+    def forward(self, batch_size):
+        mean = torch.zeros(batch_size, 1, self.z_dim).cuda()
+        std = self.std * torch.ones(batch_size, 1, self.z_dim).cuda()
+        dist = Normal(mean, std)
+        return dist
+
+       
+class Encoder(nn.Module):
+    def __init__(self, x_dim, hid_dim, lat_dim, y_dim, 
+                 pre_layer=4, post_layer=2, 
+                 is_stochastic=False, is_attention=False, is_multiply=False):
+        super(Encoder, self).__init__()
+        
+        self.x_dim, self.hid_dim, self.y_dim = x_dim, hid_dim, y_dim
+        
+        self.pre_encoder = MLP(x_dim+y_dim, hid_dim, hid_dim, nn.ReLU(), pre_layer)
+        
+        if is_attention:
+            self.fc_qk = MLP(x_dim, hid_dim, hid_dim, nn.ReLU(), 2)
+            self.fc_v = MLP(hid_dim, hid_dim, 
+                            lat_dim*2 if is_stochastic else lat_dim,
+                            nn.ReLU(), 2)
+        else:
+            self.post_encoder = MLP(hid_dim, hid_dim, 
+                                    lat_dim*2 if is_stochastic else lat_dim,
+                                    nn.ReLU(), post_layer)
+        
+        if is_multiply and not is_stochastic:
+            self.S = nn.Parameter(torch.Tensor(1, hid_dim, x_dim))
+            nn.init.xavier_uniform_(self.S)
+            
+            self.fc_z = MLP(lat_dim, hid_dim, lat_dim, nn.ReLU(), 2)
+            self.LN = nn.LayerNorm(lat_dim)
+                
+        self.is_stochastic = is_stochastic
+        self.is_attention = is_attention
+        self.is_multiply = is_multiply
+        
+    def calc_latent(self, set_, num_target, Tx, 
+                    z=None, just_dist=False):
+        si = self.pre_encoder(set_)
+        
+        if self.is_attention:
+            set_x = set_[:,:,:self.x_dim]
+            Q = self.fc_qk(self.S.repeat(Tx.size(0), 1, 1)) if self.is_multiply else self.fc_qk(Tx)
+            K = self.fc_qk(set_x)        
+            s = self.fc_v(si)
+            A = torch.softmax(Q.bmm(K.transpose(1,2))/math.sqrt(self.hid_dim), dim=2)
+            lat = A.bmm(s)
+        else:
+            s = si.mean(dim=1, keepdim=True)
+            lat = self.post_encoder(s)
+            lat = lat.repeat(1, self.hid_dim if self.is_multiply else num_target, 1) 
+        
+        if self.is_stochastic:
+            mu, omega = torch.chunk(lat, chunks=2, dim=-1)
+            sigma = 0.1+0.9*torch.sigmoid(omega)
+
+            dist = Normal(mu, sigma)
+
+            if just_dist:
+                return dist
+            else:
+                if self.training:
+                    z = dist.rsample()
+                else:
+                    z = dist.mean
+                
+                entropy = - calc_log_prob(dist, z)
+                return dist, z, entropy
+        else:
+            r = self.LN(lat + self.fc_z(z)) if self.is_multiply else lat
+            return r
+    
+class Decoder(nn.Module):
+    def __init__(self, x_dim, hid_dim, r_dim, z_dim, y_dim, 
+                 num_layer=3, is_attention=False, is_multiply=False):
+        super(Decoder, self).__init__()
+        
+        self.r_encoder = Encoder(x_dim, hid_dim, r_dim, y_dim,
+                                 pre_layer=2 if is_attention else 4,
+                                 is_stochastic=False,
+                                 is_attention=is_attention,
+                                 is_multiply=is_multiply)
+        
+        if is_multiply:
+            self.fc_x = MLP(x_dim, hid_dim, r_dim, nn.ReLU(), 2)
+            dec_inp_dim = hid_dim
+        else:
+            dec_inp_dim = x_dim+r_dim+z_dim
+        
+        self.decoder = MLP(dec_inp_dim, hid_dim, y_dim*2, nn.ReLU(), num_layer)
+        
+        self.is_multiply = is_multiply
+        
+    def calc_y(self, C, Tx, z):
+        num_target = Tx.size(1)
+        r = self.r_encoder.calc_latent(C, num_target, Tx, 
+                                       z=z if self.is_multiply else None)
+        if self.is_multiply:
+            tx = self.fc_x(Tx)
+            dec_inp = tx.bmm(r.transpose(1,2))
+        else:
+            dec_inp = torch.cat([Tx, r, z], dim=-1)
+        
+        y_param = self.decoder(dec_inp)
+        
+        mu, omega = torch.chunk(y_param, chunks=2, dim=-1)
+        sigma = 0.1+0.9*F.softplus(omega)
+        dist = Normal(mu, sigma)
+        if self.training:
+            pred = dist.rsample()
+        else:
+            pred = dist.mean    
+        return dist, pred
